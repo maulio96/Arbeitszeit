@@ -1,156 +1,287 @@
-import React, { useEffect, useMemo, useState } from "react";
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arbeitszeiterfassung</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f7fa;
+      color: #1f2937;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: white;
+      padding: 24px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    h1, h2 {
+      margin-top: 0;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      min-width: 180px;
+    }
+    label {
+      font-size: 14px;
+      margin-bottom: 6px;
+      font-weight: bold;
+    }
+    input[type="number"], input[type="time"] {
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+    }
+    th, td {
+      border: 1px solid #d1d5db;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background: #eef2f7;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .big {
+      font-size: 26px;
+      font-weight: bold;
+      margin-top: 8px;
+    }
+    .muted {
+      color: #64748b;
+      font-size: 14px;
+    }
+    .positive { color: #15803d; font-weight: bold; }
+    .negative { color: #b91c1c; font-weight: bold; }
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 10px;
+      background: #dc2626;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #b91c1c;
+    }
+    .footer {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Arbeitszeiterfassung</h1>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
+      <p class="muted">Private Wochenübersicht für Mo–Fr mit Urlaub, Pausenlogik und Restzeit.</p>
+      <button onclick="resetWeek()">Woche zurücksetzen</button>
+    </div>
+    <h2>Allgemein</h2>
+    <div class="row">
+      <div class="field">
+        <label for="weeklyHours">Wochenstunden</label>
+        <input id="weeklyHours" type="number" step="0.25" min="0" />
+      </div>
+      <div class="field">
+        <label for="lunchBreak">Mittagspause (min)</label>
+        <input id="lunchBreak" type="number" step="1" min="0" />
+      </div>
+      <div class="field">
+        <label for="vesperBreak">Vesperpause (min)</label>
+        <input id="vesperBreak" type="number" step="1" min="0" />
+      </div>
+      <div class="field">
+        <label>Soll pro Tag</label>
+        <div id="dailyTarget" style="padding:9px 10px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px;">00:00</div>
+      </div>
+    </div>
+    <h2>Woche</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Tag</th>
+          <th>Kommen</th>
+          <th>Gehen</th>
+          <th>Urlaub</th>
+          <th>Soll</th>
+          <th>Ist</th>
+          <th>Differenz</th>
+        </tr>
+      </thead>
+      <tbody id="weekTable"></tbody>
+    </table>
+    <div class="summary">
+      <div class="card">
+        <div class="muted">Wochensumme Ist</div>
+        <div class="big" id="workedNormal">0 h 00 min</div>
+        <div class="muted" id="workedIndustry">0.00 h</div>
+      </div>
+      <div class="card">
+        <div class="muted">Fehlende Zeit</div>
+        <div class="big" id="missingIndustry">0.00 h</div>
+        <div class="muted" id="missingNormal">0 h 00 min</div>
+      </div>
+      <div class="card">
+        <div class="muted">Überstunden</div>
+        <div class="big" id="overtimeNormal">0 h 00 min</div>
+        <div class="muted" id="overtimeIndustry">0.00 h</div>
+      </div>
+    </div>
+    <div class="footer">
+      ✅ Alles wird lokal im Browser gespeichert. Keine Datenbank, kein Server, ideal für GitHub Pages.
+    </div>
+  </div>
+  <script>
+    const DAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
+    const defaultState = {
+      weeklyHours: 40,
+      lunchBreak: 30,
+      vesperBreak: 15,
+      days: DAY_NAMES.map(() => ({ kommen: "", gehen: "", urlaub: false }))
+    };
+    let state = loadState();
+    function loadState() {
+      try {
+        const saved = localStorage.getItem("arbeitszeit-app-html-v1");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.days && parsed.days.length === 5) return parsed;
+        }
+      } catch (e) {}
+      return JSON.parse(JSON.stringify(defaultState));
+    }
+    function saveState() {
+      localStorage.setItem("arbeitszeit-app-html-v1", JSON.stringify(state));
+    }
+    function timeToMinutes(value) {
+      if (!value || !value.includes(":")) return null;
+      const [h, m] = value.split(":").map(Number);
+      if (Number.isNaN(h) || Number.isNaN(m)) return null;
+      return h * 60 + m;
+    }
+    function formatClock(min) {
+      const sign = min < 0 ? "-" : "";
+      const abs = Math.abs(Math.round(min));
+      const h = Math.floor(abs / 60);
+      const m = abs % 60;
+      return sign + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+    }
+    function formatNormal(min) {
+      const sign = min < 0 ? "-" : "";
+      const abs = Math.abs(Math.round(min));
+      const h = Math.floor(abs / 60);
+      const m = abs % 60;
+      return sign + h + " h " + String(m).padStart(2, "0") + " min";
+    }
+    function formatIndustry(min) {
+      const sign = min < 0 ? "-" : "";
+      return sign + (Math.abs(min) / 60).toFixed(2) + " h";
+    }
+    function getDailyTargetMinutes() {
+      return Math.round((Number(state.weeklyHours || 0) * 60) / 5);
+    }
+    function getWorkedMinutes(day) {
+      const dailyTarget = getDailyTargetMinutes();
+      if (day.urlaub) return dailyTarget;
+      const start = timeToMinutes(day.kommen);
+      const end = timeToMinutes(day.gehen);
+      if (start === null || end === null || end <= start) return 0;
+      const raw = end - start;
+      let result = raw - Number(state.vesperBreak || 0);
+      if (result >= 360) {
+        result -= Number(state.lunchBreak || 0);
+      }
+      return Math.max(0, result);
+    }
+    function render() {
+      document.getElementById("weeklyHours").value = state.weeklyHours;
+      document.getElementById("lunchBreak").value = state.lunchBreak;
+      document.getElementById("vesperBreak").value = state.vesperBreak;
+      const dailyTarget = getDailyTargetMinutes();
+      document.getElementById("dailyTarget").textContent = formatClock(dailyTarget);
+      const tbody = document.getElementById("weekTable");
+      tbody.innerHTML = "";
+      let totalWorked = 0;
+      state.days.forEach((day, index) => {
+        const worked = getWorkedMinutes(day);
+        const diff = worked - dailyTarget;
+        totalWorked += worked;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${DAY_NAMES[index]}</td>
+          <td><input type="time" value="${day.kommen}" ${day.urlaub ? "disabled" : ""} onchange="updateDay(${index}, 'kommen', this.value)"></td>
+          <td><input type="time" value="${day.gehen}" ${day.urlaub ? "disabled" : ""} onchange="updateDay(${index}, 'gehen', this.value)"></td>
+          <td><input type="checkbox" ${day.urlaub ? "checked" : ""} onchange="updateDay(${index}, 'urlaub', this.checked)"></td>
+          <td>${formatClock(dailyTarget)}</td>
+          <td>${formatClock(worked)}</td>
+          <td class="${diff >= 0 ? "positive" : "negative"}">${diff >= 0 ? "+" : ""}${formatClock(diff)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      const totalTarget = dailyTarget * 5;
+      const missing = Math.max(0, totalTarget - totalWorked);
+      const overtime = Math.max(0, totalWorked - totalTarget);
+      document.getElementById("workedNormal").textContent = formatNormal(totalWorked);
+      document.getElementById("workedIndustry").textContent = formatIndustry(totalWorked);
+      document.getElementById("missingNormal").textContent = formatNormal(missing);
+      document.getElementById("missingIndustry").textContent = formatIndustry(missing);
+      document.getElementById("overtimeNormal").textContent = formatNormal(overtime);
+      document.getElementById("overtimeIndustry").textContent = formatIndustry(overtime);
+      saveState();
+    }
+    function updateDay(index, field, value) {
+      state.days[index][field] = value;
+      render();
+    }
+    function resetWeek() {
+      state = JSON.parse(JSON.stringify(defaultState));
+      render();
+    }
+    document.getElementById("weeklyHours").addEventListener("input", (e) => {
+      state.weeklyHours = Number(e.target.value);
+      render();
+    });
+    document.getElementById("lunchBreak").addEventListener("input", (e) => {
+      state.lunchBreak = Number(e.target.value);
+      render();
+    });
+    document.getElementById("vesperBreak").addEventListener("input", (e) => {
+      state.vesperBreak = ub PagesNumber(e.target.value);
+      render();
+    });
 
-// ✅ GITHUB-PAGES-FERTIGE INDEX-DATEI (React via CDN)
-// Diese Datei kann 1:1 als index.html auf GitHub Pages liegen
-// Kein Build, kein Node, kein Server nötig
 
-
-const DAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
-
-const defaultDay = () => ({
-  kommen: "",
-  gehen: "",
-  urlaub: false,
-});
-
-const defaultState = {
-  weeklyHours: 40,
-  lunchBreak: 30,   // Mittagspause in Minuten
-  vesperBreak: 15,  // Vesperpause in Minuten
-  days: DAY_NAMES.map(() => defaultDay()),
-};
-
-function timeToMinutes(value) {
-  if (!value || !value.includes(":")) return null;
-  const [h, m] = value.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  return h * 60 + m;
-}
-
-function formatNormal(min) {
-  const sign = min < 0 ? "-" : "";
-  const abs = Math.abs(Math.round(min));
-  return `${sign}${Math.floor(abs / 60)} h ${abs % 60} min`;
-}
-
-function formatIndustry(min) {
-  const sign = min < 0 ? "-" : "";
-  return `${sign}${Math.abs(min / 60).toFixed(2)} h`;
-}
-
-function formatClock(min) {
-  const sign = min < 0 ? "-" : "";
-  const abs = Math.abs(Math.round(min));
-  return `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
-}
-
-function getWorkedMinutes(day, dailyTarget, lunch, vesper) {
-  if (day.urlaub) return dailyTarget;
-
-
-  const start = timeToMinutes(day.kommen);
-  const end = timeToMinutes(day.gehen);
-  if (start === null || end === null || end <= start) return 0;
-
-
-  const raw = end - start;
-
-
-  // ✅ Regel:
-  // Vesperpause IMMER abziehen
-  // Mittagspause NUR wenn (Arbeitszeit - Vesper) >= 6h
-
-
-  let result = raw - vesper;
-  if (result >= 360) {
-    result -= lunch;
-  }
-
-
-  return Math.max(0, result);
-}
-
-export default function App() {
-  const [data, setData] = useState(defaultState);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("arbeitszeit-app-v2");
-    if (saved) setData(JSON.parse(saved));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("arbeitszeit-app-v2", JSON.stringify(data));
-  }, [data]);
-
-  const dailyTarget = useMemo(() => Math.round((data.weeklyHours * 60) / 5), [data.weeklyHours]);
-  const rows = data.days.map(d => {
-    const worked = getWorkedMinutes(d, dailyTarget, data.lunchBreak, data.vesperBreak);
-    return { worked, diff: worked - dailyTarget };
-  });
-  const totalWorked = rows.reduce((a, b) => a + b.worked, 0);
-  const totalTarget = dailyTarget * 5;
-  const missing = Math.max(0, totalTarget - totalWorked);
-  const updateDay = (i, patch) => {
-    setData(v => ({
-      ...v,
-      days: v.days.map((d, idx) => idx === i ? { ...d, ...patch } : d),
-    }));
-  };
-
-  return (
-    <div style={{ fontFamily: "system-ui", padding: 20, maxWidth: 1200, margin: "auto" }}>
-      <h1>Arbeitszeiterfassung</h1>
-
-      <h3>Allgemein</h3>
-      <label>Wochenstunden: </label>
-      <input type="number" value={data.weeklyHours}
-        onChange={e => setData({ ...data, weeklyHours: Number(e.target.value) })} />
-
-      <br /><br />
-
-      <label>Mittagspause (min): </label>
-      <input type="number" value={data.lunchBreak}
-        onChange={e => setData({ ...data, lunchBreak: Number(e.target.value) })} />
-
-      <br /><br />
-
-      <label>Vesperpause (min): </label>
-      <input type="number" value={data.vesperBreak}
-        onChange={e => setData({ ...data, vesperBreak: Number(e.target.value) })} />
-
-      <h3>Woche</h3>
-      <table border="1" cellPadding="5">
-        <thead>
-          <tr>
-            <th>Tag</th><th>Kommen</th><th>Gehen</th><th>Urlaub</th><th>Soll</th><th>Ist</th><th>Diff</th>
-          </tr>
-        </thead>
-        <tbody>
-          {DAY_NAMES.map((name, i) => (
-            <tr key={name}>
-              <td>{name}</td>
-              <td><input type="time" disabled={data.days[i].urlaub} value={data.days[i].kommen}
-                onChange={e => updateDay(i, { kommen: e.target.value })} /></td>
-              <td><input type="time" disabled={data.days[i].urlaub} value={data.days[i].gehen}
-                onChange={e => updateDay(i, { gehen: e.target.value })} /></td>
-              <td><input type="checkbox" checked={data.days[i].urlaub}
-                onChange={e => updateDay(i, { urlaub: e.target.checked })} /></td>
-              <td>{formatClock(dailyTarget)}</td>
-              <td>{formatClock(rows[i].worked)}</td>
-              <td>{formatClock(rows[i].diff)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <h3>Offene Zeit</h3>
-      <p>Industriezeit: <b>{formatIndustry(missing)}</b></p>
-      <p>Normalzeit: <b>{formatNormal(missing)}</b></p>
-
-
-      <p style={{ marginTop: 20, color: "#555" }}>
-        ✅ Lokal gespeichert – ideal für private GitHub Pages
-      </p>
-    </div>
-  );
-}
+    render();
+  </script>
+</body>
