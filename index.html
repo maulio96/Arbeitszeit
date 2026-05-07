@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Arbeitszeiterfassung</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       font-family: Arial, sans-serif;
       margin: 0;
@@ -13,7 +14,7 @@
       color: #1f2937;
     }
     .container {
-      max-width: 1100px;
+      max-width: 1150px;
       margin: 0 auto;
       background: white;
       padding: 24px;
@@ -22,6 +23,14 @@
     }
     h1, h2 {
       margin-top: 0;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
     }
     .row {
       display: flex;
@@ -33,6 +42,7 @@
       display: flex;
       flex-direction: column;
       min-width: 180px;
+      flex: 1;
     }
     label {
       font-size: 14px;
@@ -44,16 +54,31 @@
       border: 1px solid #cbd5e1;
       border-radius: 8px;
       font-size: 14px;
+      width: 100%;
+    }
+    .readonly-box {
+      padding: 9px 10px;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      min-height: 38px;
+      display: flex;
+      align-items: center;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 16px;
+      min-width: 880px;
+    }
+    .table-wrap {
+      overflow-x: auto;
     }
     th, td {
       border: 1px solid #d1d5db;
       padding: 10px;
       text-align: center;
+      vertical-align: middle;
     }
     th {
       background: #eef2f7;
@@ -78,6 +103,7 @@
     .muted {
       color: #64748b;
       font-size: 14px;
+      margin: 0;
     }
     .positive { color: #15803d; font-weight: bold; }
     .negative { color: #b91c1c; font-weight: bold; }
@@ -98,15 +124,25 @@
       font-size: 14px;
       color: #64748b;
     }
+    .checkbox-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Arbeitszeiterfassung</h1>
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
-      <p class="muted">Private Wochenübersicht für Mo–Fr mit Urlaub, Pausenlogik und Restzeit.</p>
+
+
+    <div class="topbar">
+      <p class="muted">Private Wochenübersicht für Mo–Fr mit Kommen, Gehen, Urlaub und automatischer Restzeit.</p>
       <button onclick="resetWeek()">Woche zurücksetzen</button>
     </div>
+
+
     <h2>Allgemein</h2>
     <div class="row">
       <div class="field">
@@ -122,25 +158,31 @@
         <input id="vesperBreak" type="number" step="1" min="0" />
       </div>
       <div class="field">
-        <label>Soll pro Tag</label>
-        <div id="dailyTarget" style="padding:9px 10px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px;">00:00</div>
+        <label for="dailyTarget">Soll pro Tag</label>
+        <div id="dailyTarget" class="readonly-box">00:00</div>
       </div>
     </div>
+
+
     <h2>Woche</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Tag</th>
-          <th>Kommen</th>
-          <th>Gehen</th>
-          <th>Urlaub</th>
-          <th>Soll</th>
-          <th>Ist</th>
-          <th>Differenz</th>
-        </tr>
-      </thead>
-      <tbody id="weekTable"></tbody>
-    </table>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tag</th>
+            <th>Kommen</th>
+            <th>Gehen</th>
+            <th>Urlaub</th>
+            <th>Soll</th>
+            <th>Ist</th>
+            <th>Differenz</th>
+          </tr>
+        </thead>
+        <tbody id="weekTable"></tbody>
+      </table>
+    </div>
+
+
     <div class="summary">
       <div class="card">
         <div class="muted">Wochensumme Ist</div>
@@ -158,38 +200,56 @@
         <div class="muted" id="overtimeIndustry">0.00 h</div>
       </div>
     </div>
+
+
     <div class="footer">
       ✅ Alles wird lokal im Browser gespeichert. Keine Datenbank, kein Server, ideal für GitHub Pages.
     </div>
   </div>
+
+
   <script>
     const DAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
+
+
     const defaultState = {
       weeklyHours: 40,
       lunchBreak: 30,
       vesperBreak: 15,
       days: DAY_NAMES.map(() => ({ kommen: "", gehen: "", urlaub: false }))
     };
+
+
     let state = loadState();
+
+
     function loadState() {
       try {
-        const saved = localStorage.getItem("arbeitszeit-app-html-v1");
+        const saved = localStorage.getItem("arbeitszeit-app-html-v2");
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (parsed && parsed.days && parsed.days.length === 5) return parsed;
+          if (parsed && parsed.days && parsed.days.length === 5) {
+            return parsed;
+          }
         }
       } catch (e) {}
       return JSON.parse(JSON.stringify(defaultState));
     }
+
+
     function saveState() {
-      localStorage.setItem("arbeitszeit-app-html-v1", JSON.stringify(state));
+      localStorage.setItem("arbeitszeit-app-html-v2", JSON.stringify(state));
     }
+
+
     function timeToMinutes(value) {
       if (!value || !value.includes(":")) return null;
       const [h, m] = value.split(":").map(Number);
       if (Number.isNaN(h) || Number.isNaN(m)) return null;
       return h * 60 + m;
     }
+
+
     function formatClock(min) {
       const sign = min < 0 ? "-" : "";
       const abs = Math.abs(Math.round(min));
@@ -197,6 +257,8 @@
       const m = abs % 60;
       return sign + String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
     }
+
+
     function formatNormal(min) {
       const sign = min < 0 ? "-" : "";
       const abs = Math.abs(Math.round(min));
@@ -204,83 +266,157 @@
       const m = abs % 60;
       return sign + h + " h " + String(m).padStart(2, "0") + " min";
     }
+
+
     function formatIndustry(min) {
       const sign = min < 0 ? "-" : "";
       return sign + (Math.abs(min) / 60).toFixed(2) + " h";
     }
+
+
     function getDailyTargetMinutes() {
       return Math.round((Number(state.weeklyHours || 0) * 60) / 5);
     }
+
+
     function getWorkedMinutes(day) {
       const dailyTarget = getDailyTargetMinutes();
-      if (day.urlaub) return dailyTarget;
+
+
+      if (day.urlaub) {
+        return dailyTarget;
+      }
+
+
       const start = timeToMinutes(day.kommen);
       const end = timeToMinutes(day.gehen);
-      if (start === null || end === null || end <= start) return 0;
+
+
+      if (start === null || end === null || end <= start) {
+        return 0;
+      }
+
+
       const raw = end - start;
       let result = raw - Number(state.vesperBreak || 0);
+
+
       if (result >= 360) {
         result -= Number(state.lunchBreak || 0);
       }
+
+
       return Math.max(0, result);
     }
+
+
+    function updateDay(index, field, value) {
+      state.days[index][field] = value;
+      render();
+    }
+
+
+    function resetWeek() {
+      state = JSON.parse(JSON.stringify(defaultState));
+      render();
+    }
+
+
     function render() {
       document.getElementById("weeklyHours").value = state.weeklyHours;
       document.getElementById("lunchBreak").value = state.lunchBreak;
       document.getElementById("vesperBreak").value = state.vesperBreak;
+
+
       const dailyTarget = getDailyTargetMinutes();
       document.getElementById("dailyTarget").textContent = formatClock(dailyTarget);
+
+
       const tbody = document.getElementById("weekTable");
       tbody.innerHTML = "";
+
+
       let totalWorked = 0;
+
+
       state.days.forEach((day, index) => {
         const worked = getWorkedMinutes(day);
         const diff = worked - dailyTarget;
         totalWorked += worked;
+
+
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${DAY_NAMES[index]}</td>
-          <td><input type="time" value="${day.kommen}" ${day.urlaub ? "disabled" : ""} onchange="updateDay(${index}, 'kommen', this.value)"></td>
-          <td><input type="time" value="${day.gehen}" ${day.urlaub ? "disabled" : ""} onchange="updateDay(${index}, 'gehen', this.value)"></td>
-          <td><input type="checkbox" ${day.urlaub ? "checked" : ""} onchange="updateDay(${index}, 'urlaub', this.checked)"></td>
+          <td>
+            <input
+              type="time"
+              value="${day.kommen}"
+              ${day.urlaub ? "disabled" : ""}
+              onchange="updateDay(${index}, 'kommen', this.value)"
+            >
+          </td>
+          <td>
+            <input
+              type="time"
+              value="${day.gehen}"
+              ${day.urlaub ? "disabled" : ""}
+              onchange="updateDay(${index}, 'gehen', this.value)"
+            >
+          </td>
+          <td>
+            <div class="checkbox-wrap">
+              <input
+                type="checkbox"
+                ${day.urlaub ? "checked" : ""}
+                onchange="updateDay(${index}, 'urlaub', this.checked)"
+              >
+              <span>Ja</span>
+            </div>
+          </td>
           <td>${formatClock(dailyTarget)}</td>
           <td>${formatClock(worked)}</td>
           <td class="${diff >= 0 ? "positive" : "negative"}">${diff >= 0 ? "+" : ""}${formatClock(diff)}</td>
         `;
+
+
         tbody.appendChild(tr);
       });
+
+
       const totalTarget = dailyTarget * 5;
       const missing = Math.max(0, totalTarget - totalWorked);
       const overtime = Math.max(0, totalWorked - totalTarget);
+
+
       document.getElementById("workedNormal").textContent = formatNormal(totalWorked);
       document.getElementById("workedIndustry").textContent = formatIndustry(totalWorked);
       document.getElementById("missingNormal").textContent = formatNormal(missing);
       document.getElementById("missingIndustry").textContent = formatIndustry(missing);
       document.getElementById("overtimeNormal").textContent = formatNormal(overtime);
       document.getElementById("overtimeIndustry").textContent = formatIndustry(overtime);
+
+
       saveState();
     }
-    function updateDay(index, field, value) {
-      state.days[index][field] = value;
-      render();
-    }
-    function resetWeek() {
-      state = JSON.parse(JSON.stringify(defaultState));
-      render();
-    }
-    document.getElementById("weeklyHours").addEventListener("input", (e) => {
+
+
+    document.getElementById("weeklyHours").addEventListener("input", function (e) {
       state.weeklyHours = Number(e.target.value);
       render();
     });
-    document.getElementById("lunchBreak").addEventListener("input", (e) => {
+
+
+    document.getElementById("lunchBreak").addEventListener("input", function (e) {
       state.lunchBreak = Number(e.target.value);
       render();
     });
-    document.getElementById("vesperBreak").addEventListener("input", (e) => {
-      state.vesperBreak = ub PagesNumber(e.target.value);
+
+
+    document.getElementById("vesperBreak").addEventListener("input", function (e) {
+      state.vesperBreak = Number(e.target.value);
       render();
     });
-
 
     render();
   </script>
