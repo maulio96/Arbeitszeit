@@ -1,0 +1,156 @@
+import React, { useEffect, useMemo, useState } from "react";
+
+// ✅ GITHUB-PAGES-FERTIGE INDEX-DATEI (React via CDN)
+// Diese Datei kann 1:1 als index.html auf GitHub Pages liegen
+// Kein Build, kein Node, kein Server nötig
+
+
+const DAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
+
+const defaultDay = () => ({
+  kommen: "",
+  gehen: "",
+  urlaub: false,
+});
+
+const defaultState = {
+  weeklyHours: 40,
+  lunchBreak: 30,   // Mittagspause in Minuten
+  vesperBreak: 15,  // Vesperpause in Minuten
+  days: DAY_NAMES.map(() => defaultDay()),
+};
+
+function timeToMinutes(value) {
+  if (!value || !value.includes(":")) return null;
+  const [h, m] = value.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function formatNormal(min) {
+  const sign = min < 0 ? "-" : "";
+  const abs = Math.abs(Math.round(min));
+  return `${sign}${Math.floor(abs / 60)} h ${abs % 60} min`;
+}
+
+function formatIndustry(min) {
+  const sign = min < 0 ? "-" : "";
+  return `${sign}${Math.abs(min / 60).toFixed(2)} h`;
+}
+
+function formatClock(min) {
+  const sign = min < 0 ? "-" : "";
+  const abs = Math.abs(Math.round(min));
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+}
+
+function getWorkedMinutes(day, dailyTarget, lunch, vesper) {
+  if (day.urlaub) return dailyTarget;
+
+
+  const start = timeToMinutes(day.kommen);
+  const end = timeToMinutes(day.gehen);
+  if (start === null || end === null || end <= start) return 0;
+
+
+  const raw = end - start;
+
+
+  // ✅ Regel:
+  // Vesperpause IMMER abziehen
+  // Mittagspause NUR wenn (Arbeitszeit - Vesper) >= 6h
+
+
+  let result = raw - vesper;
+  if (result >= 360) {
+    result -= lunch;
+  }
+
+
+  return Math.max(0, result);
+}
+
+export default function App() {
+  const [data, setData] = useState(defaultState);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("arbeitszeit-app-v2");
+    if (saved) setData(JSON.parse(saved));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("arbeitszeit-app-v2", JSON.stringify(data));
+  }, [data]);
+
+  const dailyTarget = useMemo(() => Math.round((data.weeklyHours * 60) / 5), [data.weeklyHours]);
+  const rows = data.days.map(d => {
+    const worked = getWorkedMinutes(d, dailyTarget, data.lunchBreak, data.vesperBreak);
+    return { worked, diff: worked - dailyTarget };
+  });
+  const totalWorked = rows.reduce((a, b) => a + b.worked, 0);
+  const totalTarget = dailyTarget * 5;
+  const missing = Math.max(0, totalTarget - totalWorked);
+  const updateDay = (i, patch) => {
+    setData(v => ({
+      ...v,
+      days: v.days.map((d, idx) => idx === i ? { ...d, ...patch } : d),
+    }));
+  };
+
+  return (
+    <div style={{ fontFamily: "system-ui", padding: 20, maxWidth: 1200, margin: "auto" }}>
+      <h1>Arbeitszeiterfassung</h1>
+
+      <h3>Allgemein</h3>
+      <label>Wochenstunden: </label>
+      <input type="number" value={data.weeklyHours}
+        onChange={e => setData({ ...data, weeklyHours: Number(e.target.value) })} />
+
+      <br /><br />
+
+      <label>Mittagspause (min): </label>
+      <input type="number" value={data.lunchBreak}
+        onChange={e => setData({ ...data, lunchBreak: Number(e.target.value) })} />
+
+      <br /><br />
+
+      <label>Vesperpause (min): </label>
+      <input type="number" value={data.vesperBreak}
+        onChange={e => setData({ ...data, vesperBreak: Number(e.target.value) })} />
+
+      <h3>Woche</h3>
+      <table border="1" cellPadding="5">
+        <thead>
+          <tr>
+            <th>Tag</th><th>Kommen</th><th>Gehen</th><th>Urlaub</th><th>Soll</th><th>Ist</th><th>Diff</th>
+          </tr>
+        </thead>
+        <tbody>
+          {DAY_NAMES.map((name, i) => (
+            <tr key={name}>
+              <td>{name}</td>
+              <td><input type="time" disabled={data.days[i].urlaub} value={data.days[i].kommen}
+                onChange={e => updateDay(i, { kommen: e.target.value })} /></td>
+              <td><input type="time" disabled={data.days[i].urlaub} value={data.days[i].gehen}
+                onChange={e => updateDay(i, { gehen: e.target.value })} /></td>
+              <td><input type="checkbox" checked={data.days[i].urlaub}
+                onChange={e => updateDay(i, { urlaub: e.target.checked })} /></td>
+              <td>{formatClock(dailyTarget)}</td>
+              <td>{formatClock(rows[i].worked)}</td>
+              <td>{formatClock(rows[i].diff)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3>Offene Zeit</h3>
+      <p>Industriezeit: <b>{formatIndustry(missing)}</b></p>
+      <p>Normalzeit: <b>{formatNormal(missing)}</b></p>
+
+
+      <p style={{ marginTop: 20, color: "#555" }}>
+        ✅ Lokal gespeichert – ideal für private GitHub Pages
+      </p>
+    </div>
+  );
+}
